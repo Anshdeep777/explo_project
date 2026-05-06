@@ -679,12 +679,13 @@ def load_raw_data():
 
 df = load_raw_data()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📈 Friction vs. Speed",
     "🌡️ Thermal Profile",
     "🛡️ Coating Effectiveness",
     "⚖️ Archard's Law",
     "🏆 Material Ranking",
+    "📐 Thermal Expansion"
 ])
 
 # -- TAB 1: SPEED PROFILE --
@@ -702,56 +703,62 @@ with tab1:
         upper = [m + s for m, s in zip(means, stds)]
         lower = [max(m - s, 0) for m, s in zip(means, stds)]
 
+        # 1. Changed fillcolor to a semi-transparent white so it shows up on black
         fig_sci.add_trace(go.Scatter(
             x=speeds + speeds[::-1],
             y=upper + lower[::-1],
             fill='toself',
-            fillcolor='rgba(0, 0, 0, 0.08)',
+            fillcolor='rgba(255, 255, 255, 0.1)', 
             line=dict(color='rgba(255,255,255,0)'),
             name='Experimental Variance (±1σ)',
             showlegend=True,
             hoverinfo='skip'
         ))
 
+        # 2. Changed the main line and marker borders from black (#000000) to white (#FFFFFF)
         fig_sci.add_trace(go.Scatter(
             x=speeds, y=means,
             mode='lines+markers',
             name=f'Mean Response ({mat})',
-            line=dict(color='#000000', width=2.5),
-            marker=dict(size=10, symbol='circle', color='white',
-                        line=dict(width=2, color='#000000')),
+            line=dict(color='#FFFFFF', width=2.5),
+            marker=dict(size=10, symbol='circle', color='black',
+                        line=dict(width=2, color='#FFFFFF')),
             hovertemplate="v: %{x} m/s<br>μ: %{y:.4f}<extra></extra>"
         ))
 
+        # 3. Tweaked the AI prediction marker to a brighter red for better contrast
         fig_sci.add_trace(go.Scatter(
             x=[speed], y=[pred_cof],
             mode='markers',
             name='Current AI Prediction',
-            marker=dict(color='#d62728', size=12, symbol='x', line=dict(width=2)),
+            marker=dict(color='#ff4b4b', size=12, symbol='x', line=dict(width=2.5, color='#ff4b4b')),
             showlegend=True
         ))
 
+        # 4. Updated layout, grids, legend, and text to dark mode equivalents
         fig_sci.update_layout(
             xaxis=dict(
                 title="Sliding Velocity, <i>v</i> (m/s)", type="log",
                 tickvals=KNOWN_SPEEDS, ticktext=[str(s) for s in KNOWN_SPEEDS],
-                gridcolor='lightgrey', minor=dict(showgrid=True, gridcolor='#f0f0f0'),
-                linecolor='black', mirror=True
+                gridcolor='#333333', minor=dict(showgrid=True, gridcolor='#222222'),
+                linecolor='white', mirror=True, color='white'
             ),
             yaxis=dict(
                 title="Friction Coefficient, <i>μ</i>",
-                gridcolor='lightgrey', linecolor='black', mirror=True,
-                zeroline=True, zerolinecolor='grey', range=[0, max(upper) * 1.2]
+                gridcolor='#333333', linecolor='white', mirror=True, color='white',
+                zeroline=True, zerolinecolor='#666666', range=[0, max(upper) * 1.2]
             ),
             legend=dict(yanchor="top", y=0.98, xanchor="right", x=0.98,
-                        bgcolor="rgba(255,255,255,0.8)", bordercolor="Black", borderwidth=1),
-            font=dict(family="serif", size=14),
-            height=500, plot_bgcolor="white", template="none"
+                        bgcolor="rgba(0,0,0,0.8)", bordercolor="white", borderwidth=1, font=dict(color="white")),
+            font=dict(family="serif", size=14, color="white"),
+            height=500, 
+            plot_bgcolor="black", 
+            paper_bgcolor="black", 
+            template="plotly_dark"
         )
         st.plotly_chart(fig_sci, use_container_width=True)
     else:
         st.warning(f"No baseline data available for {mat} in the dataset.")
-
 # -- TAB 2: THERMAL PROFILE --
 with tab2:
     st.subheader(f"🌡️ Thermal Friction Response: {mat} with {coat}")
@@ -1029,27 +1036,25 @@ with tab4:
 
 # ── TAB 5: MATERIAL RANKING ───────────────────────────────────────
 with tab5:
-    st.subheader("🏆 Material Ranking — Best to Worst for Your Exact Config")
+    st.subheader("🏆 Material Ranking")
     st.caption(
-        f"All 9 substrate materials ranked by AI-predicted COF and Wear Rate, "
-        f"holding **{coat}** | **Temp={temp}°C** | **Load={load}N** | "
-        f"**Speed={speed}m/s** | **{env}** fixed. "
-        f"Currently selected material is highlighted."
+        f"All 9 materials ranked by AI predictions at **{coat}** | "
+        f"**Temp={temp}°C** | **Load={load}N** | **Speed={speed}m/s** | **{env}**"
     )
 
     rank_tab_cof, rank_tab_wear, rank_tab_hard = st.tabs([
-        "⚡ Rank by COF (Friction)",
+        "⚡ Rank by COF",
         "🔬 Rank by Wear Rate",
-        "💎 Rank by Hardness"
+        "💎 Rank by Hardness",
     ])
 
     # ── Build one input row per material ──────────────────────────
-    ranking_rows  = []
-    ranking_mats  = []
+    ranking_rows = []
+    ranking_mats = []
 
     for material in all_materials:
-        rp = get_props_at_temp(material, coat, temp, mat_props, coat_props,
-                               temp_mat_props, global_mean)
+        rp  = get_props_at_temp(material, coat, temp, mat_props, coat_props,
+                                temp_mat_props, global_mean)
         row = dict.fromkeys(expected_columns, 0.0)
         row['Lunar Contact']       = 1 if "Yes" in env else 0
         row['Temperature (°C)']    = float(temp)
@@ -1065,13 +1070,9 @@ with tab5:
         ranking_rows.append(row)
         ranking_mats.append(material)
 
-    ranking_df = pd.DataFrame(ranking_rows, columns=expected_columns)
-
-    # ── AI predictions for all 9 materials ───────────────────────
-    rank_cof_vals  = [max(float(v), 0.0)
-                      for v in model_cof.predict(ranking_df)]
-    rank_wear_vals = [10 ** float(v)
-                      for v in model_wear.predict(ranking_df)]
+    ranking_df     = pd.DataFrame(ranking_rows, columns=expected_columns)
+    rank_cof_vals  = [max(float(v), 0.0) for v in model_cof.predict(ranking_df)]
+    rank_wear_vals = [10 ** float(v)      for v in model_wear.predict(ranking_df)]
 
     results_df = pd.DataFrame({
         'Material':  ranking_mats,
@@ -1079,205 +1080,138 @@ with tab5:
         'Wear Rate': rank_wear_vals,
     })
 
-    # ── Colour helper ─────────────────────────────────────────────
-    def bar_colors(series, selected, ascending=True):
-        n = len(series)
-        ranked = series.rank(ascending=ascending)
-        colors = []
-        for i, material in enumerate(results_df['Material']):
+    # ── Colour helper (FIXED) ─────────────────────────────────────
+    # series and mat_list must be in the same order (already-sorted df)
+    # ascending=True  → lowest value = green  (COF, Wear)
+    # ascending=False → highest value = green (Hardness)
+    def bar_colors_fixed(values, mat_list, selected, ascending=True):
+        n      = len(values)
+        order  = np.argsort(values)           # indices sorted best→worst
+        if not ascending:
+            order = order[::-1]
+        rank_of = {mat_list[idx]: pos for pos, idx in enumerate(order)}
+        colors  = []
+        for material in mat_list:
             if material == selected:
-                colors.append('#FFD700')
+                colors.append('#FFD700')      # gold
                 continue
-            norm = (ranked.iloc[i] - 1) / max(n - 1, 1)
-            if ascending:
-                r = int(255 * norm)
-                g = int(200 * (1 - norm))
-            else:
-                r = int(255 * (1 - norm))
-                g = int(200 * norm)
-            colors.append(f'rgb({r},{g},60)')
+            pos  = rank_of[material]          # 0 = best, n-1 = worst
+            norm = pos / max(n - 1, 1)        # 0.0 → 1.0
+            r    = int(220 * norm)
+            g    = int(180 * (1 - norm))
+            colors.append(f'rgb({r},{g},50)')
         return colors
+
+    # ── Shared layout updater ─────────────────────────────────────
+    def rank_layout(fig, title_text, xtitle, xtype='linear'):
+        fig.update_layout(
+            title=dict(text=title_text, font=dict(size=13)),
+            xaxis=dict(title=xtitle, gridcolor='lightgrey',
+                       type=xtype,
+                       exponentformat='e' if xtype == 'log' else None),
+            yaxis=dict(title='', autorange='reversed'),
+            height=400,
+            plot_bgcolor='white',
+            template='none',
+            font=dict(family='serif', size=12),
+            margin=dict(l=10, r=110, t=80, b=40),
+        )
+
+    def short(name):
+        return (name.replace(' (WC-Co)', '').replace(' C17200', '')
+                    .replace(' (Si3N4)', '').replace(' 7075', '')
+                    .replace(' 301',    '').replace(' 718',   ''))
 
     # ════════════════════════════════════════════════════════════════
     # SUB-TAB A — Rank by COF
     # ════════════════════════════════════════════════════════════════
     with rank_tab_cof:
-        cof_sorted = results_df.sort_values('COF', ascending=True).reset_index(drop=True)
+        cof_sorted         = results_df.sort_values('COF').reset_index(drop=True)
         cof_sorted['Rank'] = [f"#{i+1}" for i in range(len(cof_sorted))]
-
-        bar_clrs_cof = bar_colors(
-            cof_sorted['COF'].reset_index(drop=True),
+        clrs_cof           = bar_colors_fixed(
+            cof_sorted['COF'].tolist(),
+            cof_sorted['Material'].tolist(),
             mat, ascending=True
         )
 
-        short_names = [m.replace(' (WC-Co)', '').replace(' C17200', '')
-                         .replace(' (Si3N4)', '').replace(' 7075', '')
-                         .replace(' 301', '').replace(' 718', '')
-                       for m in cof_sorted['Material']]
-
-        fig_rank_cof = go.Figure()
-
-        fig_rank_cof.add_trace(go.Bar(
-            y=[f"{r} {n}" for r, n in zip(cof_sorted['Rank'], short_names)],
+        fig_cof = go.Figure(go.Bar(
+            y=[f"{r}  {short(m)}" for r, m in zip(cof_sorted['Rank'], cof_sorted['Material'])],
             x=cof_sorted['COF'],
             orientation='h',
-            marker=dict(
-                color=bar_clrs_cof,
-                line=dict(color='black', width=0.8),
-            ),
+            marker=dict(color=clrs_cof, line=dict(color='black', width=0.6)),
             text=[f"{v:.4f}" for v in cof_sorted['COF']],
             textposition='outside',
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Predicted COF: %{x:.4f}"
-                "<extra></extra>"
-            ),
+            hovertemplate="<b>%{y}</b><br>COF: %{x:.4f}<extra></extra>",
         ))
 
-        sel_cof = results_df[results_df['Material'] == mat]['COF'].values[0]
-        fig_rank_cof.add_vline(
-            x=sel_cof,
-            line=dict(color='#FFD700', width=2, dash='dash'),
-            annotation_text=f"{mat.split()[0]} ({sel_cof:.4f})",
-            annotation_position='top right',
-            annotation_font_color='#b8860b',
-        )
+        sel_cof = results_df.loc[results_df['Material'] == mat, 'COF'].values[0]
+        fig_cof.add_vline(x=sel_cof,
+                          line=dict(color='#FFD700', width=2, dash='dash'),
+                          annotation_text=f"{mat.split()[0]} ({sel_cof:.4f})",
+                          annotation_position='top right',
+                          annotation_font_color='#b8860b')
 
-        fig_rank_cof.update_layout(
-            title=dict(
-                text=(
-                    f"COF Ranking — All 9 Materials with {coat}<br>"
-                    f"<sup>Temp={temp}°C | Load={load}N | Speed={speed}m/s | "
-                    f"{env} | Gold = your selected material | "
-                    f"Green = best, Red = worst</sup>"
-                ),
-                font=dict(size=13),
-            ),
-            xaxis=dict(
-                title="Predicted COF (lower = better ✅)",
-                gridcolor='lightgrey',
-                zeroline=True,
-            ),
-            yaxis=dict(
-                title="",
-                autorange='reversed',
-            ),
-            height=420,
-            plot_bgcolor='white',
-            template='none',
-            font=dict(family='serif', size=12),
-            margin=dict(l=10, r=80, t=80, b=40),
-        )
+        rank_layout(fig_cof,
+                    f"COF Ranking — {coat} | Temp={temp}°C | Load={load}N | Speed={speed}m/s | {env}",
+                    "Predicted COF  (lower = better ✅)")
+        st.plotly_chart(fig_cof, use_container_width=True)
 
-        st.plotly_chart(fig_rank_cof, use_container_width=True)
-
-        # ── Summary metrics ───────────────────────────────────────
-        best_cof_mat  = cof_sorted.iloc[0]['Material']
-        worst_cof_mat = cof_sorted.iloc[-1]['Material']
-        sel_rank_cof  = cof_sorted[cof_sorted['Material'] == mat].index[0] + 1
-
+        sel_rank_cof = cof_sorted[cof_sorted['Material'] == mat].index[0] + 1
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("🥇 Best Material",  best_cof_mat.split('(')[0].strip(),
+        c1.metric("🥇 Best",  short(cof_sorted.iloc[0]['Material']),
                   f"COF = {cof_sorted.iloc[0]['COF']:.4f}")
-        c2.metric("🔴 Worst Material", worst_cof_mat.split('(')[0].strip(),
+        c2.metric("🔴 Worst", short(cof_sorted.iloc[-1]['Material']),
                   f"COF = {cof_sorted.iloc[-1]['COF']:.4f}")
-        c3.metric("📍 Your Selection",
-                  f"Rank #{sel_rank_cof} / 9",
-                  f"{mat.split()[0]} COF = {sel_cof:.4f}")
-        improvement = cof_sorted.iloc[-1]['COF'] - cof_sorted.iloc[0]['COF']
-        c4.metric("📉 Best vs Worst Gap", f"{improvement:.4f}",
-                  help="COF difference between best and worst material at these conditions")
+        c3.metric("📍 Your Rank", f"#{sel_rank_cof} / 9",
+                  f"COF = {sel_cof:.4f}")
+        c4.metric("📉 Best↔Worst Gap",
+                  f"{cof_sorted.iloc[-1]['COF'] - cof_sorted.iloc[0]['COF']:.4f}")
 
     # ════════════════════════════════════════════════════════════════
     # SUB-TAB B — Rank by Wear Rate
     # ════════════════════════════════════════════════════════════════
     with rank_tab_wear:
-        wear_sorted = results_df.sort_values('Wear Rate', ascending=True).reset_index(drop=True)
+        wear_sorted         = results_df.sort_values('Wear Rate').reset_index(drop=True)
         wear_sorted['Rank'] = [f"#{i+1}" for i in range(len(wear_sorted))]
-
-        bar_clrs_wear = bar_colors(
-            wear_sorted['Wear Rate'].reset_index(drop=True),
+        clrs_wear           = bar_colors_fixed(
+            wear_sorted['Wear Rate'].tolist(),
+            wear_sorted['Material'].tolist(),
             mat, ascending=True
         )
 
-        short_names_w = [m.replace(' (WC-Co)', '').replace(' C17200', '')
-                          .replace(' (Si3N4)', '').replace(' 7075', '')
-                          .replace(' 301', '').replace(' 718', '')
-                        for m in wear_sorted['Material']]
-
-        fig_rank_wear = go.Figure()
-
-        fig_rank_wear.add_trace(go.Bar(
-            y=[f"{r} {n}" for r, n in zip(wear_sorted['Rank'], short_names_w)],
+        fig_wear = go.Figure(go.Bar(
+            y=[f"{r}  {short(m)}" for r, m in zip(wear_sorted['Rank'], wear_sorted['Material'])],
             x=wear_sorted['Wear Rate'],
             orientation='h',
-            marker=dict(
-                color=bar_clrs_wear,
-                line=dict(color='black', width=0.8),
-            ),
+            marker=dict(color=clrs_wear, line=dict(color='black', width=0.6)),
             text=[f"{v:.2e}" for v in wear_sorted['Wear Rate']],
             textposition='outside',
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Predicted Wear Rate: %{x:.3e} mm³/N·m"
-                "<extra></extra>"
-            ),
+            hovertemplate="<b>%{y}</b><br>Wear Rate: %{x:.3e} mm³/N·m<extra></extra>",
         ))
 
-        sel_wear = results_df[results_df['Material'] == mat]['Wear Rate'].values[0]
-        fig_rank_wear.add_vline(
-            x=sel_wear,
-            line=dict(color='#FFD700', width=2, dash='dash'),
-            annotation_text=f"{mat.split()[0]} ({sel_wear:.2e})",
-            annotation_position='top right',
-            annotation_font_color='#b8860b',
-        )
+        sel_wear = results_df.loc[results_df['Material'] == mat, 'Wear Rate'].values[0]
+        fig_wear.add_vline(x=sel_wear,
+                           line=dict(color='#FFD700', width=2, dash='dash'),
+                           annotation_text=f"{mat.split()[0]} ({sel_wear:.2e})",
+                           annotation_position='top right',
+                           annotation_font_color='#b8860b')
 
-        fig_rank_wear.update_layout(
-            title=dict(
-                text=(
-                    f"Wear Rate Ranking — All 9 Materials with {coat}<br>"
-                    f"<sup>Temp={temp}°C | Load={load}N | Speed={speed}m/s | "
-                    f"{env} | Gold = your selected material | "
-                    f"Green = best (lowest wear), Red = worst</sup>"
-                ),
-                font=dict(size=13),
-            ),
-            xaxis=dict(
-                title="Predicted Wear Rate mm³/N·m (lower = better ✅)",
-                type='log',
-                gridcolor='lightgrey',
-                exponentformat='e',
-            ),
-            yaxis=dict(
-                title="",
-                autorange='reversed',
-            ),
-            height=420,
-            plot_bgcolor='white',
-            template='none',
-            font=dict(family='serif', size=12),
-            margin=dict(l=10, r=100, t=80, b=40),
-        )
+        rank_layout(fig_wear,
+                    f"Wear Rate Ranking — {coat} | Temp={temp}°C | Load={load}N | Speed={speed}m/s | {env}",
+                    "Predicted Wear Rate mm³/N·m  (lower = better ✅)",
+                    xtype='log')
+        st.plotly_chart(fig_wear, use_container_width=True)
 
-        st.plotly_chart(fig_rank_wear, use_container_width=True)
-
-        # ── Summary metrics (FIXED: moved here from rank_tab_hard) ──
-        best_wear_mat  = wear_sorted.iloc[0]['Material']
-        worst_wear_mat = wear_sorted.iloc[-1]['Material']
-        sel_rank_wear  = wear_sorted[wear_sorted['Material'] == mat].index[0] + 1
-
+        sel_rank_wear = wear_sorted[wear_sorted['Material'] == mat].index[0] + 1
         w1, w2, w3, w4 = st.columns(4)
-        w1.metric("🥇 Best Material",  best_wear_mat.split('(')[0].strip(),
-                  f"{wear_sorted.iloc[0]['Wear Rate']:.2e} mm³/N·m")
-        w2.metric("🔴 Worst Material", worst_wear_mat.split('(')[0].strip(),
-                  f"{wear_sorted.iloc[-1]['Wear Rate']:.2e} mm³/N·m")
-        w3.metric("📍 Your Selection",
-                  f"Rank #{sel_rank_wear} / 9",
-                  f"{mat.split()[0]} = {sel_wear:.2e}")
+        w1.metric("🥇 Best",  short(wear_sorted.iloc[0]['Material']),
+                  f"{wear_sorted.iloc[0]['Wear Rate']:.2e}")
+        w2.metric("🔴 Worst", short(wear_sorted.iloc[-1]['Material']),
+                  f"{wear_sorted.iloc[-1]['Wear Rate']:.2e}")
+        w3.metric("📍 Your Rank", f"#{sel_rank_wear} / 9",
+                  f"{sel_wear:.2e}")
         ratio = wear_sorted.iloc[-1]['Wear Rate'] / max(wear_sorted.iloc[0]['Wear Rate'], 1e-20)
-        w4.metric("📉 Worst / Best Ratio", f"{ratio:.1f}×",
-                  help="How many times more wear the worst material has vs the best")
+        w4.metric("📉 Worst/Best Ratio", f"{ratio:.1f}×")
 
     # ════════════════════════════════════════════════════════════════
     # SUB-TAB C — Rank by Hardness
@@ -1289,115 +1223,242 @@ with tab5:
                                    temp_mat_props, global_mean)
             hardness_vals.append(rp.get('Hardness (HV)', 0.0))
 
-        hard_df = pd.DataFrame({
-            'Material':  all_materials,
-            'Hardness':  hardness_vals,
-        })
-
-        hard_sorted = hard_df.sort_values('Hardness', ascending=False).reset_index(drop=True)
+        hard_df         = pd.DataFrame({'Material': all_materials,
+                                        'Hardness': hardness_vals})
+        hard_sorted     = hard_df.sort_values('Hardness', ascending=False).reset_index(drop=True)
         hard_sorted['Rank'] = [f"#{i+1}" for i in range(len(hard_sorted))]
-
-        bar_clrs_hard = bar_colors(
-            hard_sorted['Hardness'].reset_index(drop=True),
-            mat, ascending=False
+        clrs_hard       = bar_colors_fixed(
+            hard_sorted['Hardness'].tolist(),
+            hard_sorted['Material'].tolist(),
+            mat, ascending=False          # higher HV = green
         )
 
-        short_names_h = [m.replace(' (WC-Co)', '').replace(' C17200', '')
-                          .replace(' (Si3N4)', '').replace(' 7075', '')
-                          .replace(' 301', '').replace(' 718', '')
-                         for m in hard_sorted['Material']]
-
-        fig_rank_hard = go.Figure()
-
-        fig_rank_hard.add_trace(go.Bar(
-            y=[f"{r} {n}" for r, n in zip(hard_sorted['Rank'], short_names_h)],
+        fig_hard = go.Figure(go.Bar(
+            y=[f"{r}  {short(m)}" for r, m in zip(hard_sorted['Rank'], hard_sorted['Material'])],
             x=hard_sorted['Hardness'],
             orientation='h',
-            marker=dict(
-                color=bar_clrs_hard,
-                line=dict(color='black', width=0.8),
-            ),
+            marker=dict(color=clrs_hard, line=dict(color='black', width=0.6)),
             text=[f"{v:.0f} HV" for v in hard_sorted['Hardness']],
             textposition='outside',
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Hardness: %{x:.0f} HV"
-                "<extra></extra>"
-            ),
+            hovertemplate="<b>%{y}</b><br>Hardness: %{x:.0f} HV<extra></extra>",
         ))
 
-        sel_hard_vals = hard_df[hard_df['Material'] == mat]['Hardness'].values
-        sel_hard = sel_hard_vals[0] if len(sel_hard_vals) > 0 else 0.0
-        fig_rank_hard.add_vline(
-            x=sel_hard,
-            line=dict(color='#FFD700', width=2, dash='dash'),
-            annotation_text=f"{mat.split()[0]} ({sel_hard:.0f} HV)",
-            annotation_position='top right',
-            annotation_font_color='#b8860b',
-        )
+        sel_hard = hard_df.loc[hard_df['Material'] == mat, 'Hardness'].values[0]
+        fig_hard.add_vline(x=sel_hard,
+                           line=dict(color='#FFD700', width=2, dash='dash'),
+                           annotation_text=f"{mat.split()[0]} ({sel_hard:.0f} HV)",
+                           annotation_position='top right',
+                           annotation_font_color='#b8860b')
 
-        fig_rank_hard.update_layout(
-            title=dict(
-                text=(
-                    f"Hardness Ranking — All 9 Materials with {coat}<br>"
-                    f"<sup>Temp={temp}°C | Gold = your selected material | "
-                    f"Green = hardest (best), Red = softest | "
-                    f"Hardness updates with temperature & coating</sup>"
-                ),
-                font=dict(size=13),
-            ),
-            xaxis=dict(
-                title="Hardness (HV) — higher = better ✅",
-                gridcolor='lightgrey',
-            ),
-            yaxis=dict(
-                title="",
-                autorange='reversed',
-            ),
-            height=420,
-            plot_bgcolor='white',
-            template='none',
-            font=dict(family='serif', size=12),
-            margin=dict(l=10, r=120, t=80, b=40),
-        )
+        rank_layout(fig_hard,
+                    f"Hardness Ranking — {coat} | Selected Temp={temp}°C  ",
+                    "Hardness (HV)")
+        st.plotly_chart(fig_hard, use_container_width=True)
 
-        st.plotly_chart(fig_rank_hard, use_container_width=True)
-
-        # ── Summary metrics ───────────────────────────────────────
-        best_hard_mat  = hard_sorted.iloc[0]['Material']
-        worst_hard_mat = hard_sorted.iloc[-1]['Material']
-        sel_rank_hard  = hard_sorted[hard_sorted['Material'] == mat].index[0] + 1
-
+        sel_rank_hard = hard_sorted[hard_sorted['Material'] == mat].index[0] + 1
         h1, h2, h3, h4 = st.columns(4)
-        h1.metric("🥇 Hardest Material", best_hard_mat.split('(')[0].strip(),
+        h1.metric("🥇 Hardest",  short(hard_sorted.iloc[0]['Material']),
                   f"{hard_sorted.iloc[0]['Hardness']:.0f} HV")
-        h2.metric("🔴 Softest Material", worst_hard_mat.split('(')[0].strip(),
+        h2.metric("🔴 Softest",  short(hard_sorted.iloc[-1]['Material']),
                   f"{hard_sorted.iloc[-1]['Hardness']:.0f} HV")
-        h3.metric("📍 Your Selection",
-                  f"Rank #{sel_rank_hard} / 9",
-                  f"{mat.split()[0]} = {sel_hard:.0f} HV")
+        h3.metric("📍 Your Rank", f"#{sel_rank_hard} / 9",
+                  f"{sel_hard:.0f} HV")
         hard_ratio = hard_sorted.iloc[0]['Hardness'] / max(hard_sorted.iloc[-1]['Hardness'], 1)
-        h4.metric("📐 Hardest / Softest Ratio", f"{hard_ratio:.1f}×",
-                  help="How many times harder the hardest material is vs the softest at these conditions")
+        h4.metric("📐 Hardest/Softest", f"{hard_ratio:.1f}×")
 
-    # ── Overall recommendation box ────────────────────────────────
+    # ── Overall verdict ───────────────────────────────────────────
     st.markdown("---")
-    best_overall      = cof_sorted.iloc[0]['Material']
-    best_wear_overall = wear_sorted.iloc[0]['Material']
+    best_cof_mat  = cof_sorted.iloc[0]['Material']
+    best_wear_mat = wear_sorted.iloc[0]['Material']
 
-    if best_overall == best_wear_overall:
+    if best_cof_mat == best_wear_mat:
         st.success(
-            f"✅ **Clear Winner:** **{best_overall}** is #1 in both COF and Wear Rate "
-            f"with **{coat}** at your current conditions. Ideal choice for this mission config."
+            f"✅ **{best_cof_mat}** ranks #1 in both COF and Wear Rate "
+            f"with **{coat}** at your current conditions."
         )
     else:
         st.warning(
-            f"⚠️ **Trade-off exists:** Best for friction → **{best_overall}** | "
-            f"Best for wear → **{best_wear_overall}**. "
-            f"Choose based on whether sliding friction or material loss is your bigger concern."
+            f"⚠️ Friction → **{best_cof_mat}** (#1 COF) | "
+            f"Wear → **{best_wear_mat}** (#1 Wear Rate)"
         )
+# -- TAB 6: THERMAL EXPANSION --
+with tab6:
+    st.subheader(f"📐 Thermal Expansion vs. Temperature ({coat} coating)")
+    st.caption(
+        "Tracking dimensional stability across the lunar temperature range. "
+        "Lower values indicate better resistance to thermal shock and mechanical binding."
+    )
 
+    fig_te = go.Figure()
 
+    # Calculate y-axis bounds for a clean graph
+    te_all_vals = []
+    for material in all_materials:
+        for t in KNOWN_TEMPS:
+            key3 = (material, coat, t)
+            if key3 in temp_mat_props.index:
+                val = float(temp_mat_props.loc[key3, 'Thermal Expansion (×10⁻⁶/°C)'])
+                if not np.isnan(val):
+                    te_all_vals.append(val)
+    
+    if te_all_vals:
+        y_min_te = max(min(te_all_vals) * 0.85, 0)
+        y_max_te = max(te_all_vals) * 1.15
+    else:
+        y_min_te, y_max_te = 0, 30
+
+    # Plot each material
+    for i, material in enumerate(all_materials):
+        color = PALETTE[i % len(PALETTE)]
+        key_m = (material, coat)
+        mat_coat_idx = temp_mat_props.index.droplevel(-1)
+
+        # Only plot if this material/coating combo exists
+        if key_m not in mat_coat_idx:
+            continue
+
+        mean_vals = []
+        for t in KNOWN_TEMPS:
+            key3 = (material, coat, t)
+            if key3 in temp_mat_props.index:
+                mean_vals.append(float(temp_mat_props.loc[key3, 'Thermal Expansion (×10⁻⁶/°C)']))
+            else:
+                mean_vals.append(np.nan)
+
+        is_selected = (material == mat)
+        
+        fig_te.add_trace(go.Scatter(
+            x=KNOWN_TEMPS, y=mean_vals,
+            mode='lines+markers',
+            name=material + (' ◀ selected' if is_selected else ''),
+            legendgroup=material,
+            line=dict(color=color,
+                      width=4 if is_selected else 1.8,
+                      dash='solid' if is_selected else 'dot'),
+            marker=dict(size=9 if is_selected else 5),
+            hovertemplate=(
+                f"<b>{material}</b><br>"
+                "Temperature: %{x}°C<br>"
+                "Th. Expansion: %{y:.2f} ×10⁻⁶/°C"
+                "<extra></extra>"
+            )
+        ))
+
+    # Add vertical line for the current temperature selected on the slider
+    fig_te.add_vline(
+        x=temp,
+        line=dict(color='red', dash='dash', width=1.5),
+        annotation_text=f"Current: {temp}°C",
+        annotation_position="top right",
+        annotation_font_color='red',
+    )
+    
+    # Background temperature zones
+    fig_te.add_vrect(x0=-173, x1=0, fillcolor='steelblue', opacity=0.04,
+                    layer='below', line_width=0,
+                    annotation_text='Cryogenic', annotation_position='top left',
+                    annotation_font_size=10, annotation_font_color='steelblue')
+    fig_te.add_vrect(x0=0, x1=127, fillcolor='tomato', opacity=0.04,
+                    layer='below', line_width=0,
+                    annotation_text='High-T', annotation_position='top right',
+                    annotation_font_size=10, annotation_font_color='tomato')
+
+    fig_te.update_layout(
+        title=dict(
+            text=f'Thermal Expansion across Lunar Temperatures<br>'
+                 f'<sup>All materials with {coat} | Bold line = currently selected | '
+                 f'Dotted red = {temp}°C</sup>',
+            font=dict(size=14)
+        ),
+        xaxis_title='Temperature (°C)',
+        yaxis=dict(title='Thermal Expansion (×10⁻⁶/°C)', range=[y_min_te, y_max_te]),
+        hovermode='x unified',
+        height=520,
+        legend=dict(font=dict(size=10)),
+        template='plotly_white'
+    )
+    st.plotly_chart(fig_te, use_container_width=True)
+# ─────────────────────────────────────────────
+# 13. MODEL ACCURACY REPORT (80/20 SPLIT)
+# ─────────────────────────────────────────────
+st.markdown("---")
+st.header("📊 Model Accuracy Report (80/20 Split)")
+st.write("This section trains the XGBoost models on a random **80%** subset of the data and tests their accuracy on the unseen **20%** holdout set")
+
+@st.cache_data
+def evaluate_models():
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+    import numpy as np
+
+    # Load data specifically for isolated evaluation
+    df_eval = pd.read_csv('Lunar_Tribology_ML_Dataset__1_.csv')
+    df_eval.columns = df_eval.columns.str.strip()
+
+    wear_col = next(c for c in df_eval.columns if 'Wear Rate' in c)
+    df_eval['Lunar Contact'] = df_eval['Lunar Contact'].str.strip().map({'Yes': 1, 'No': 0})
+    df_eval['Log_Wear_Rate'] = np.log10(pd.to_numeric(df_eval[wear_col], errors='coerce').clip(lower=1e-12))
+
+    df_enc = pd.get_dummies(df_eval, columns=['Material', 'Coating Material'])
+    drop_cols = ['COF', wear_col, 'Log_Wear_Rate']
+    X = df_enc.drop(columns=drop_cols)
+    y_cof = df_enc['COF']
+    y_wear = df_enc['Log_Wear_Rate']
+
+    # 80/20 random split
+    X_train, X_test, y_cof_train, y_cof_test, y_wear_train, y_wear_test = train_test_split(
+        X, y_cof, y_wear, test_size=0.20, random_state=42
+    )
+
+    # Train params (matching the main model setup)
+    params = dict(n_estimators=300, max_depth=6, learning_rate=0.08,
+                  subsample=0.8, colsample_bytree=0.8, random_state=42,
+                  tree_method='hist')
+
+    xgb_cof_eval = xgb.XGBRegressor(**params)
+    xgb_wear_eval = xgb.XGBRegressor(**params)
+
+    # Train on 80%
+    xgb_cof_eval.fit(X_train, y_cof_train)
+    xgb_wear_eval.fit(X_train, y_wear_train)
+
+    # Predict on unseen 20%
+    cof_preds = xgb_cof_eval.predict(X_test)
+    wear_preds = xgb_wear_eval.predict(X_test)
+
+    # Calculate metrics
+    metrics = {
+        "cof": {
+            "r2": r2_score(y_cof_test, cof_preds),
+            "mae": mean_absolute_error(y_cof_test, cof_preds),
+            "rmse": np.sqrt(mean_squared_error(y_cof_test, cof_preds))
+        },
+        "wear": {
+            "r2": r2_score(y_wear_test, wear_preds),
+            "mae": mean_absolute_error(y_wear_test, wear_preds),
+            "rmse": np.sqrt(mean_squared_error(y_wear_test, wear_preds))
+        }
+    }
+    return metrics
+
+with st.spinner("Evaluating model accuracy on a 20% holdout set..."):
+    eval_metrics = evaluate_models()
+
+col_eval1, col_eval2 = st.columns(2)
+
+with col_eval1:
+    st.subheader("⚡ Friction (COF) Predictor")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("R² Score", f"{eval_metrics['cof']['r2']:.4f}", help="Closer to 1.0 is better")
+    c2.metric("MAE", f"{eval_metrics['cof']['mae']:.4f}", help="Mean Absolute Error (lower is better)")
+    c3.metric("RMSE", f"{eval_metrics['cof']['rmse']:.4f}", help="Root Mean Squared Error (lower is better)")
+
+with col_eval2:
+    st.subheader("🔬 Wear Rate Predictor (Log-Scale)")
+    w1, w2, w3 = st.columns(3)
+    w1.metric("R² Score", f"{eval_metrics['wear']['r2']:.4f}", help="Closer to 1.0 is better")
+    w2.metric("MAE", f"{eval_metrics['wear']['mae']:.4f}", help="Mean Absolute Error (lower is better)")
+    w3.metric("RMSE", f"{eval_metrics['wear']['rmse']:.4f}", help="Root Mean Squared Error (lower is better)")
 # ─────────────────────────────────────────────
 # 11. CONFIGURATION SUMMARY
 # ─────────────────────────────────────────────
